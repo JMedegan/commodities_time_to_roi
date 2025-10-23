@@ -1,15 +1,12 @@
 """Project pipelines."""
 
-from kedro.framework.project import find_pipelines
 from kedro.pipeline import Pipeline
-
+from pipelines.time_to_roi.pipeline import create_pipeline
 
 def register_pipelines() -> dict[str, Pipeline]:
-    """Register the project's pipelines.
+    """Register the project's pipelines."""
+    time_to_roi = create_pipeline()
 
-    Returns:
-        A mapping from pipeline names to ``Pipeline`` objects.
-    """
-    pipelines = find_pipelines()
-    pipelines["__default__"] = sum(pipelines.values())
-    return pipelines
+    return {
+        "time_to_roi": time_to_roi,
+    }

@@ -16,7 +16,8 @@ dependencies = [
     "kedro-viz>=6.7.0",
     "scikit-learn~=1.5.1",
     "seaborn~=0.12.1",
-    "setuptools; python_version >= '3.12'"
+    "setuptools; python_version >= '3.12'",
+    "pyspark>=3.5.7",
 ]
 
 [project.scripts]
@@ -86,3 +87,6 @@ select = [
     "T201", # Print Statement
 ]
 ignore = ["E501"]  # Ruff format takes care of line-too-long
+
+[tool.kedro_telemetry]
+project_id = "409b29063f434aa6860ab665c74228b6"

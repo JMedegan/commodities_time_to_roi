@@ -1,0 +1,9 @@
+gold_prices_data:
+  type: pandas.CSVDataSet
+  filepath: data/01_raw/gold_prices_historical_data_2025_07.csv
+  layer: raw
+
+data_ready_for_modeling:
+  type: pandas.CSVDataSet
+  filepath: data/04_feature/data_ready_for_modeling.csv
+  layer: feature
