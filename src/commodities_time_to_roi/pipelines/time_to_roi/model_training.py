@@ -62,24 +62,17 @@ def _cat_indices(df: pd.DataFrame, cols: list[str]) -> list[int]:
             cats.append(i)
     return cats
 
-
 def train_regression_time_to_roi_models(
     df: pd.DataFrame,
     selected_features: dict[str, list[str]],
     targets_prefix: str = "time_to_",
     date_col: str = "Date",
     test_ratio: float = 0.2,
-) -> dict[str, dict[str, object]]:
+) -> tuple[dict[str, dict[str, object]], pd.DataFrame]:
     """
-    Train CatBoost regressors for time-to-ROI targets with a chronological split.
+    Train CatBoost regressors and quantile models for time-to-ROI targets.
 
-    This function detects continuous targets whose names contain `targets_prefix`
-    (e.g., "time_to_10pct_months") and trains one CatBoostRegressor per target,
-    using only the target-specific selected features and a tail-based time split
-    (no shuffle) to avoid look-ahead.
-
-    For each target, it reports MAE, MAPE, and R² on the test tail and appends a
-    `{target}_pred` column with predictions to the returned test DataFrame.
+    Provides point predictions and uncertainty bands.
 
     Parameters
     ----------
@@ -110,70 +103,87 @@ def train_regression_time_to_roi_models(
                 "R2": float
             }
     test_df : pandas.DataFrame
-        Copy of the test split augmented with `{target}_pred` columns for each
-        trained target.
+        Copy of the test split augmented with predictions added.
     """
-    # determine targets
-    targets = [c for c in df.columns if targets_prefix in c]
-    # Default CatBoost params
-    default_params = dict(
-        loss_function="RMSE",
-        random_seed=42,
-        od_type="Iter",
-        od_wait=50,
-        verbose=False,
-        allow_writing_files=False,
-    )
+    # detect continuous targets
+    targets = [c for c in df.columns if c.startswith(targets_prefix)]
 
-    # Chronological split once for all targets
+    # chronological split once
     train_df, test_df = ts_train_test_split(df, test_ratio=test_ratio)
 
     results = {}
+
     for tgt in targets:
-        logger.info("Training target: %s", tgt)
+        logger.info(f"Training regression + quantiles: {tgt}")
+
         feats = [
-            c
-            for c in selected_features.get(tgt, [])
+            c for c in selected_features.get(tgt, [])
             if c in df.columns and c != date_col
         ]
         if not feats:
-            raise ValueError(
-                f"No features found for target '{tgt}' in selected_features."
-            )
+            raise ValueError(f"No features found for target '{tgt}'")
+
         cat_idx = _cat_indices(df, feats)
 
-        # Build CatBoost Pools
+        # POOLS
         train_pool = Pool(
-            train_df[feats],
-            label=train_df[tgt],
-            cat_features=cat_idx if cat_idx else None,
+            train_df[feats], label=train_df[tgt], cat_features=cat_idx or None
         )
         test_pool = Pool(
-            test_df[feats],
-            label=test_df[tgt],
-            cat_features=cat_idx if cat_idx else None,
+            test_df[feats], label=test_df[tgt], cat_features=cat_idx or None
         )
 
-        model = CatBoostRegressor(**default_params)
-        model.fit(train_pool, eval_set=test_pool, use_best_model=True)
+        #  main model
+        main_params = dict(
+            random_seed=42,
+            od_type="Iter",
+            od_wait=50,
+            verbose=False,
+            allow_writing_files=False,
+        )
+        model_main = CatBoostRegressor(**main_params)
+        model_main.fit(train_pool, eval_set=test_pool, use_best_model=True)
+        pred_mid = model_main.predict(test_pool)
 
-        pred = model.predict(test_pool)
+        # quantile models
+        quant_low_params = dict(loss_function="Quantile:alpha=0.05", **main_params)
+        quant_high_params = dict(loss_function="Quantile:alpha=0.95", **main_params)
+
+        model_low = CatBoostRegressor(**quant_low_params)
+        model_high = CatBoostRegressor(**quant_high_params)
+
+        model_low.fit(train_pool, eval_set=test_pool, use_best_model=True)
+        model_high.fit(train_pool, eval_set=test_pool, use_best_model=True)
+
+        pred_low = model_low.predict(test_pool)
+        pred_high = model_high.predict(test_pool)
+
+        # compute metrics on main model
+        y_true = test_df[tgt].values
         metrics = {
-            "MAE": float(mean_absolute_error(test_df[tgt], pred)),
-            "R2": float(r2_score(test_df[tgt], pred)),
-            "MAPE": float(mean_absolute_percentage_error(test_df[tgt], pred)),
+            "MAE": float(mean_absolute_error(y_true, pred_mid)),
+            "R2": float(r2_score(y_true, pred_mid)),
+            "MAPE": float(mean_absolute_percentage_error(y_true, pred_mid)),
         }
 
+        # add predictions
+        test_df[f"{tgt}_pred"] = pred_mid
+        test_df[f"{tgt}_pred_low_5"] = pred_low
+        test_df[f"{tgt}_pred_high_95"] = pred_high
+
         results[tgt] = {
-            "model": model,
+            "models": {
+                "main": model_main,
+                "low_5": model_low,
+                "high_95": model_high,
+            },
             "features": feats,
             "categorical_idx": cat_idx,
             "metrics": metrics,
+            "quantiles": (0.05, 0.50, 0.95),
         }
-        # add predictions to test set
-        test_df[f"{tgt}_pred"] = pred
-    logger.info(results)
 
+    logger.info(results)
     return results, test_df
 
 
