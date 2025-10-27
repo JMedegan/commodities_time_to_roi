@@ -18,6 +18,8 @@ dependencies = [
     "seaborn~=0.12.1",
     "setuptools; python_version >= '3.12'",
     "pyspark>=3.5.7",
+    "catboost>=1.2.8",
+    "interpret>=0.7.3",
 ]
 
 [project.scripts]

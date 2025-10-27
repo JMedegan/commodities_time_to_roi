@@ -5,3 +5,19 @@ gold_prices_data:
 data_ready_for_modeling:
   type: pandas.CSVDataset
   filepath: data/04_feature/data_ready_for_modeling.csv
+
+time_to_roi_results:
+  type: pickle.PickleDataset
+  filepath: data/08_reporting/time_to_roi_results.pkl
+
+roi_within_horizon_results:
+  type: pickle.PickleDataset
+  filepath: data/08_reporting/roi_within_horizon_results.pkl
+
+test_set_with_time_to_roi_preds:
+  type: pandas.CSVDataset
+  filepath: data/07_model_output/test_set_with_time_to_roi_preds.csv
+
+test_set_with_roi_within_horizon_preds:
+  type: pandas.CSVDataset
+  filepath: data/07_model_output/test_set_with_roi_within_horizon_preds.csv

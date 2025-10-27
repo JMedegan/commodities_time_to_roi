@@ -1,13 +1,12 @@
-import pandas as pd
 import logging
+
 import numpy as np
+import pandas as pd
+
 logger = logging.getLogger(__name__)
 
 
-def filter_last_300_months(
-    df: pd.DataFrame,
-    date_col: str = "Date"
-) -> pd.DataFrame:
+def filter_last_300_months(df: pd.DataFrame, date_col: str = "Date") -> pd.DataFrame:
     """
     Filter a monthly gold price dataset to retain only the most recent 300 months.
 
@@ -38,11 +37,12 @@ def filter_last_300_months(
 
     return filtered.reset_index(drop=True)
 
+
 def add_multi_roi_time_targets(
     df: pd.DataFrame,
     project_params: dict[any],
     price_col: str = "Price",
-    date_col: str = "Date"
+    date_col: str = "Date",
 ) -> pd.DataFrame:
     """
     Add multiple ROI-based regression targets:
@@ -74,7 +74,7 @@ def add_multi_roi_time_targets(
     n = len(df)
 
     for roi in project_params["roi_targets"]:
-        col = f"time_to_{int(roi*100)}pct_months"
+        col = f"time_to_{int(roi * 100)}pct_months"
         df[col] = np.nan
 
         for i in range(n):
@@ -87,12 +87,13 @@ def add_multi_roi_time_targets(
 
     return df
 
+
 def add_multi_roi_classification_targets(
     df: pd.DataFrame,
     project_params: dict[any],
     horizon_months: int = 12,
     price_col: str = "Price",
-    date_col: str = "Date"
+    date_col: str = "Date",
 ) -> pd.DataFrame:
     """
     Add multiple binary ROI targets indicating whether each ROI
@@ -129,7 +130,7 @@ def add_multi_roi_classification_targets(
     n = len(df)
 
     for roi in project_params["roi_targets"]:
-        col = f"roi_{int(roi*100)}pct_within_{horizon_months}"
+        col = f"roi_{int(roi * 100)}pct_within_{horizon_months}"
         df[col] = False
 
         for i in range(n - horizon_months):
@@ -140,43 +141,6 @@ def add_multi_roi_classification_targets(
 
     return df
 
-
-def add_censoring_flags(
-    df: pd.DataFrame,
-    project_params: dict[any],
-) -> pd.DataFrame:
-    """
-    Add binary censoring flags for time-to-ROI regression targets.
-
-    For each ROI threshold (e.g. 0.10 for +10%), a corresponding binary event
-    column is created:
-    - 1 indicates that the ROI was reached (not censored)
-    - 0 indicates that the event did not occur (censored observation)
-
-    Parameters
-    ----------
-    df : pandas.DataFrame
-        DataFrame containing time-to-ROI target columns, sorted chronologically.
-    project_params : Dict[str, Any]
-        Dictionary containing:
-        - "roi_targets" : List[float]
-            ROI thresholds expressed as decimals (e.g., 0.10 for +10%).
-
-    Returns
-    -------
-    pandas.DataFrame
-        Updated DataFrame including new censoring flag columns:
-        * event_{roi*100}pct
-
-    """
-    df = df.copy()
-
-    for roi in project_params["roi_targets"]:
-        col = f"time_to_{int(roi*100)}pct_months"
-        flag_col = f"event_{int(roi*100)}pct"
-        df[flag_col] = df[col].notna().astype(int)
-
-    return df
 
 def impute_censored_max(
     df: pd.DataFrame,
@@ -213,13 +177,16 @@ def impute_censored_max(
     df = df.copy()
 
     for roi in project_params["roi_targets"]:
-        col = f"time_to_{int(roi*100)}pct_months"
+        col = f"time_to_{int(roi * 100)}pct_months"
         max_val = df[col].max()
         df[col] = df[col].fillna(max_val + 1)
 
     return df
 
-def add_log_price(df: pd.DataFrame, price_column: str = "Price", log_column: str = "log_price") -> pd.DataFrame:
+
+def add_log_price(
+    df: pd.DataFrame, price_column: str = "Price", log_column: str = "log_price"
+) -> pd.DataFrame:
     """
     Add a log-transformed version of a price column to the DataFrame.
 

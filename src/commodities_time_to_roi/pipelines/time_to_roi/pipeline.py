@@ -8,13 +8,17 @@ from kedro.pipeline import Node, Pipeline  # noqa
 from .nodes import (
     add_log_price,
     impute_censored_max,
-    add_censoring_flags,
     add_multi_roi_classification_targets,
     add_multi_roi_time_targets,
     filter_last_300_months,
 )
 
 from .feature_engineering_toolkit import build_features
+from .feature_selection import prune_features_per_target
+from .model_training import (
+    train_classification_roi_within_horizon,
+    train_regression_time_to_roi_models,
+)
 
 
 def create_pipeline(**kwargs):
@@ -36,13 +40,8 @@ def create_pipeline(**kwargs):
                 outputs="data_with_roi_classif_targets",
             ),
             Node(
-                func=add_censoring_flags,
-                inputs=["data_with_roi_classif_targets", "params:project_params"],
-                outputs="data_with_censoring_flags",
-            ),
-            Node(
                 func=impute_censored_max,
-                inputs=["data_with_censoring_flags", "params:project_params"],
+                inputs=["data_with_roi_classif_targets", "params:project_params"],
                 outputs="data_with_targets_censored",
             ),
             Node(
@@ -54,6 +53,24 @@ def create_pipeline(**kwargs):
                 func=build_features,
                 inputs="data_with_log_price",
                 outputs="data_ready_for_modeling",
+            ),
+            Node(
+                func=prune_features_per_target,
+                inputs="data_ready_for_modeling",
+                outputs="selected_features_per_target",
+            ),
+            Node(
+                func=train_regression_time_to_roi_models,
+                inputs=["data_ready_for_modeling", "selected_features_per_target"],
+                outputs=["time_to_roi_results", "test_set_with_time_to_roi_preds"],
+            ),
+            Node(
+                func=train_classification_roi_within_horizon,
+                inputs=["data_ready_for_modeling", "selected_features_per_target"],
+                outputs=[
+                    "roi_within_horizon_results",
+                    "test_set_with_roi_within_horizon_preds",
+                ],
             ),
         ]
     )
