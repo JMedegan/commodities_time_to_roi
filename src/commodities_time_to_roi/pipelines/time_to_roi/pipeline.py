@@ -6,7 +6,6 @@ generated using Kedro 1.0.0
 from kedro.pipeline import Node, Pipeline  # noqa
 
 from .nodes import (
-    add_log_price,
     impute_censored,
     add_multi_roi_classification_targets,
     add_multi_roi_time_targets,
@@ -45,13 +44,8 @@ def create_pipeline(**kwargs):
                 outputs="data_with_targets_censored",
             ),
             Node(
-                func=add_log_price,
-                inputs="data_with_targets_censored",
-                outputs="data_with_log_price",
-            ),
-            Node(
                 func=build_features,
-                inputs="data_with_log_price",
+                inputs="data_with_targets_censored",
                 outputs="data_ready_for_modeling",
             ),
             Node(

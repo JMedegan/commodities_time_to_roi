@@ -205,7 +205,6 @@ def impute_censored(
     for roi in project_params["roi_targets"]:
         col = f"time_to_{int(roi * 100)}pct_months"
         if col in out.columns:
-
             # Precompute fallbacks
             col_max = out[col].max(skipna=True)
             col_median = out[col].median(skipna=True)
@@ -235,39 +234,3 @@ def impute_censored(
             out[col] = vals
 
     return out
-
-
-def add_log_price(
-    df: pd.DataFrame, price_column: str = "Price", log_column: str = "log_price"
-) -> pd.DataFrame:
-    """
-    Add a log-transformed version of a price column to the DataFrame.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input DataFrame that must contain a price column.
-    price_column : str, optional
-        Name of the price column to transform. Default is "Price".
-    log_column : str, optional
-        Name of the output column to store the log-transformed values.
-        Default is "log_price".
-
-    Returns
-    -------
-    pd.DataFrame
-        A copy of the original DataFrame with an additional column containing
-        the natural logarithm of the price values. Non-positive values are
-        replaced with NaN.
-
-    Raises
-    ------
-    KeyError
-        If the specified price_column does not exist in the DataFrame.
-    """
-    if price_column not in df.columns:
-        raise KeyError(f"Column '{price_column}' does not exist in the DataFrame.")
-
-    df = df.copy()
-    df[log_column] = np.where(df[price_column] > 0, np.log(df[price_column]), np.nan)
-    return df

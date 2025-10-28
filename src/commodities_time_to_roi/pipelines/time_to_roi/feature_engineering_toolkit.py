@@ -3,6 +3,7 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
+from statsmodels.tsa.statespace.sarimax import SARIMAX
 
 
 def add_returns(
@@ -265,63 +266,168 @@ def shift_features(
     return df
 
 
+def _add_log_price(
+    df: pd.DataFrame, price_column: str = "Price", log_column: str = "log_price"
+) -> pd.DataFrame:
+    """
+    Add a log-transformed version of a price column to the DataFrame.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame that must contain a price column.
+    price_column : str, optional
+        Name of the price column to transform. Default is "Price".
+    log_column : str, optional
+        Name of the output column to store the log-transformed values.
+        Default is "log_price".
+
+    Returns
+    -------
+    pd.DataFrame
+        A copy of the original DataFrame with an additional column containing
+        the natural logarithm of the price values. Non-positive values are
+        replaced with NaN.
+
+    Raises
+    ------
+    KeyError
+        If the specified price_column does not exist in the DataFrame.
+    """
+    if price_column not in df.columns:
+        raise KeyError(f"Column '{price_column}' does not exist in the DataFrame.")
+
+    df = df.copy()
+    df[log_column] = np.where(df[price_column] > 0, np.log(df[price_column]), np.nan)
+    return df
+
+
+def _add_sarima_features(
+    df: pd.DataFrame,
+    price_col: str = "Price",
+    order: tuple[int, int, int] = (1, 1, 1),
+    seasonal_order: Optional[tuple[int, int, int, int]] = (1, 0, 1, 12),
+) -> pd.DataFrame:
+    """
+    Fit a SARIMA model to a price time series and append model-derived features.
+
+    This function fits a SARIMAX model to the column specified by `price_col`
+    and adds the following columns to the returned DataFrame:
+
+    - **sarima_fitted**: In-sample fitted values produced by the model.
+    - **sarima_residual**: Difference between actual values and fitted values
+      (`actual - sarima_fitted`), useful as a stationarized feature.
+    - **sarima_forecast_1m**: One-step-ahead forecasts for each timestamp
+      (i.e., the forecast for *t+1* based only on data available at *t*).
+      This is obtained using `model.get_prediction(dynamic=False)`.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame containing the time series.
+    price_col : str, default="Price"
+        Name of the column in `df` that holds the target price values.
+    order : tuple[int, int, int], default=(1, 1, 1)
+        The (p, d, q) order of the SARIMA non-seasonal component.
+    seasonal_order : tuple[int, int, int, int] or None, default=(1, 0, 1, 12)
+        The (P, D, Q, s) seasonal component. If `None`, no seasonal term is used.
+
+    Returns
+    -------
+    pd.DataFrame
+        A copy of `df` with three extra SARIMA-based feature columns.
+    """
+
+    x = df.copy()
+    y = x[price_col].astype(float)
+
+    model = SARIMAX(
+        y,
+        order=order,
+        seasonal_order=seasonal_order if seasonal_order else (0, 0, 0, 0),
+        enforce_stationarity=False,
+        enforce_invertibility=False,
+    ).fit(disp=False)
+
+    # In-sample fitted (same index)
+    fitted = model.fittedvalues
+    # One-step-ahead predictions (use only up-to-t info for t+1)
+    # get_prediction with dynamic=False gives one-step-ahead in-sample
+    pred_mean = model.get_prediction().predicted_mean
+
+    x["sarima_fitted"] = fitted
+    x["sarima_residual"] = y.values - fitted.values
+    x["sarima_forecast_1m"] = pred_mean.values
+
+    return x
+
+
 def build_features(
     df: pd.DataFrame,
     date_col: str = "Date",
     price_col: str = "Price",
     shift_months: int = 1,
+    include_event_targets: bool = True,
+    include_sarima: bool = False,
+    sarima_order: tuple[int, int, int] = (1, 1, 1),
+    sarima_seasonal_order: Optional[tuple[int, int, int, int]] = (1, 0, 1, 12),
 ) -> pd.DataFrame:
     """
-    Full monthly feature pipeline for gold prices with anti-leakage shift.
+    Monthly feature pipeline for gold prices with anti-leakage shifting.
+    Adds classic technical features + optional SARIMA features, then shifts all features.
 
     Steps
     -----
-    2) Add returns (1/3/6/12m) and log price
-    3) Add volatility (3/6/12/24m) and z-scores (6/12/24m)
-    4) Add momentum and moving-average crossovers
-    5) Add RSI and MACD
-    6) Add drawdown metrics (24m)
-    7) Shift features by 1 month to avoid look-ahead
-    8) Drop rows with NaNs introduced by rolling windows
-
-    Parameters
-    ----------
-    df : pandas.DataFrame
-        Monthly price series with columns [Date, Price].
-    date_col : str, optional
-        Date column name.
-    price_col : str, optional
-        Price column name.
-    target_cols : List[str], optional
-        Target columns to keep unshifted (e.g., time_to_XXpct, event_XXpct, roi_XXpct_within_12).
-    shift_months : int, optional
-        Feature shift to prevent leakage (default 1).
-
-    Returns
-    -------
-    pandas.DataFrame
-        Feature-enriched DataFrame.
+    1) Sort chronologically
+    2) Log-price & returns (1/3/6/12m)
+    3) Volatility (3/6/12/24m) & z-scores (6/12/24m)
+    4) Momentum & MA crossovers
+    5) RSI & MACD
+    6) Drawdown (24m)
+    7) (Optional) SARIMA features: fitted, residual, 1-step-ahead forecast
+    8) Shift features by `shift_months` (targets stay unshifted)
+    9) Drop rows with NaNs in features
     """
-    target_cols = [
-        c for c in df.columns if c.startswith(("time_to_", "event_", "roi_"))
-    ]
-    x = add_returns(df, price_col=price_col)
-    x = add_volatility_and_zscore(x, price_col=price_col)
-    x = add_momentum_and_ma(x, price_col=price_col)
-    x = add_rsi(x, price_col=price_col, window=6)
-    x = add_macd(x, price_col=price_col)
-    x = add_drawdown_features(x, price_col=price_col, lookback=24)
+    if shift_months < 1:
+        raise ValueError("shift_months must be >= 1")
 
+    x = df.copy().sort_values(date_col).reset_index(drop=True)
+
+    # Targets to keep untouched
+    prefixes = ("time_to_", "roi_")
+    if include_event_targets:
+        prefixes += ("event_",)
+    target_cols = [c for c in x.columns if c.startswith(prefixes)]
+
+    # 2–6) Your existing feature blocks (assumed implemented elsewhere)
+    x = _add_log_price(x)  # log_price
+    x = add_returns(x, price_col=price_col)  # return_1m/3m/6m/12m
+    x = add_volatility_and_zscore(x, price_col=price_col)  # vol_*, zscore_*
+    x = add_momentum_and_ma(x, price_col=price_col)  # momentum, MA cross, price_to_ma*
+    x = add_rsi(x, price_col=price_col, window=6)  # rsi_6
+    x = add_macd(x, price_col=price_col)  # macd, macd_signal, macd_hist
+    x = add_drawdown_features(x, price_col=price_col, lookback=24)  # dd_*, max_dd_24m
+
+    # 7) SARIMA features (added BEFORE shifting so they get shifted too)
+    if include_sarima:
+        x = _add_sarima_features(
+            x,
+            price_col=price_col,
+            order=sarima_order,
+            seasonal_order=sarima_seasonal_order,
+        )
+
+    # 8) Shift all features to avoid look-ahead (date & targets preserved)
     x = shift_features(
-        x, date_col=date_col, target_cols=target_cols, shift_months=shift_months
+        x,
+        date_col=date_col,
+        target_cols=target_cols,
+        shift_months=shift_months,
     )
 
-    # Drop rows with missing values due to rolling/shift; keep targets intact
-    if target_cols:
-        cols = [date_col] + list(target_cols)
-        feature_cols = [c for c in x.columns if c not in cols]
-        x = x.dropna(subset=feature_cols).reset_index(drop=True)
-    else:
-        x = x.dropna().reset_index(drop=True)
+    # 9) Drop rows with missing values in features (keep date & targets)
+    protect = [date_col] + target_cols
+    feature_cols = [c for c in x.columns if c not in protect]
+    x = x.dropna(subset=feature_cols).reset_index(drop=True)
 
     return x

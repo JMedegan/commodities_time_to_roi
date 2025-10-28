@@ -22,6 +22,7 @@ dependencies = [
     "interpret>=0.7.3",
     "streamlit>=1.50.0",
     "plotly>=5.24.1",
+    "statsmodels>=0.14.5",
 ]
 
 [project.scripts]
