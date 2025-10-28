@@ -20,6 +20,8 @@ dependencies = [
     "pyspark>=3.5.7",
     "catboost>=1.2.8",
     "interpret>=0.7.3",
+    "streamlit>=1.50.0",
+    "plotly>=5.24.1",
 ]
 
 [project.scripts]

@@ -11,6 +11,7 @@ from sklearn.metrics import (
     mean_absolute_percentage_error,
     r2_score,
     roc_auc_score,
+    root_mean_squared_error,
 )
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,7 @@ def _cat_indices(df: pd.DataFrame, cols: list[str]) -> list[int]:
         ):
             cats.append(i)
     return cats
+
 
 def train_regression_time_to_roi_models(
     df: pd.DataFrame,
@@ -117,7 +119,8 @@ def train_regression_time_to_roi_models(
         logger.info(f"Training regression + quantiles: {tgt}")
 
         feats = [
-            c for c in selected_features.get(tgt, [])
+            c
+            for c in selected_features.get(tgt, [])
             if c in df.columns and c != date_col
         ]
         if not feats:
@@ -162,6 +165,7 @@ def train_regression_time_to_roi_models(
         y_true = test_df[tgt].values
         metrics = {
             "MAE": float(mean_absolute_error(y_true, pred_mid)),
+            "RMSE": float(root_mean_squared_error(y_true, pred_mid)),
             "R2": float(r2_score(y_true, pred_mid)),
             "MAPE": float(mean_absolute_percentage_error(y_true, pred_mid)),
         }
@@ -180,7 +184,7 @@ def train_regression_time_to_roi_models(
             "features": feats,
             "categorical_idx": cat_idx,
             "metrics": metrics,
-            "quantiles": (0.05, 0.50, 0.95),
+            "quantiles": (0.05, 0.95),
         }
 
     logger.info(results)

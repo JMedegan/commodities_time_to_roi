@@ -7,7 +7,7 @@ from kedro.pipeline import Node, Pipeline  # noqa
 
 from .nodes import (
     add_log_price,
-    impute_censored_max,
+    impute_censored,
     add_multi_roi_classification_targets,
     add_multi_roi_time_targets,
     filter_last_300_months,
@@ -40,7 +40,7 @@ def create_pipeline(**kwargs):
                 outputs="data_with_roi_classif_targets",
             ),
             Node(
-                func=impute_censored_max,
+                func=impute_censored,
                 inputs=["data_with_roi_classif_targets", "params:project_params"],
                 outputs="data_with_targets_censored",
             ),
