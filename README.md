@@ -48,8 +48,8 @@ The final results are explored through an **interactive Streamlit dashboard**.
 │   ├── 07_model_output/               # predictions on test set
 │   └── 08_reporting/                  # stored model artifacts
 │
-├── src/commodities_time_to_roi
-│   ├── /pipelines/time_to_roi/                   # target creation, feature pipeline and model training
+├── src/commodities_time_to_roi/
+│   ├── pipelines/time_to_roi/                               # target creation, feature pipeline and model training
 │   └── commodities_time_to_roi/streamlit_app.py             # streamlit app
 │
 └── README.md                        
@@ -175,7 +175,7 @@ This pipeline is **asset-agnostic** — any monthly time series can be plugged i
   More rigorous uncertainty quantification to replace or complement quantile-based confidence bands.
 
 * **Automated Monthly Data Refresh**
-  Ability to **automatically scrape or pull new gold price data each month** (e.g., from Federal Reserve / ECB / Yahoo Finance APIs) and **retrain models on schedule**, keeping insights continuously up to date.
+  Ability to **automatically scrape or pull new gold price data each month** and **retrain models on schedule**, keeping insights continuously up to date.
 
 ---
 
