@@ -1,100 +1,184 @@
-# commodities-time-to-roi
+# **⏱️ Gold ROI Forecasting Model**
 
-[![Powered by Kedro](https://img.shields.io/badge/powered_by-kedro-ffc900?logo=kedro)](https://kedro.org)
+*Predicting how long it takes to reach a given return on investment in gold, based on historical price dynamics.*
 
-## Overview
+This project estimates:
 
-This is your new Kedro project with PySpark setup, which was generated using `kedro 1.0.0`.
+1. **Time-to-ROI (Regression)**
 
-Take a look at the [Kedro documentation](https://docs.kedro.org) to get started.
+> *How many months until the price of gold reaches +X% return?*
 
-## Rules and guidelines
+2. **Probability of achieving ROI within a defined horizon (Classification)**
 
-In order to get the best out of the template:
+> *What is the probability of reaching +X% ROI within Y months?*
 
-* Don't remove any lines from the `.gitignore` file we provide
-* Make sure your results can be reproduced by following a [data engineering convention](https://docs.kedro.org/en/stable/faq/faq.html#what-is-data-engineering-convention)
-* Don't commit data to your repository
-* Don't commit any credentials or your local configuration to your repository. Keep all your credentials and local configuration in `conf/local/`
+It is built on:
 
-## How to install dependencies
+* **Historical monthly gold prices**, sourced from
+  **[https://datahub.io/core/gold-prices](https://datahub.io/core/gold-prices)**
+* **Technical & momentum-based financial features**
+* **SARIMA time-series signals**
+* **Gradient boosting (CatBoost)** for both regression and classification tasks
 
-Declare any dependencies in `requirements.txt` for `pip` installation.
+The final results are explored through an **interactive Streamlit dashboard**.
 
-To install them, run:
+---
 
-```
-pip install -r requirements.txt
-```
+## **✨ Key Features**
 
-## How to run your Kedro pipeline
+| Component                             | Description                                                                   |
+| ------------------------------------- | ----------------------------------------------------------------------------- |
+| **ROI Target Construction**           | Computes *time-to-ROI* and *ROI-within-horizon* indicators from price history |
+| **Feature Engineering**               | Returns, volatility, z-scores, momentum, RSI, MACD, drawdowns                 |
+| **SARIMA Model-Based Signals**        | Adds fitted price, forecasted price, and residual structure                   |
+| **Leakage-Safe Time-Series Training** | Strict chronological splits + feature shifting                                |
+| **Feature Selection**                 | Normalized Mutual Information + redundancy pruning                            |
+| **Modeling**                          | CatBoost Regressors & Classifiers + optional quantile intervals               |
+| **Dashboard**                         | Streamlit UI with performance KPIs + Observed vs Predicted plots              |
 
-You can run your Kedro project with:
+---
 
-```
-kedro run
-```
-
-## How to test your Kedro project
-
-Have a look at the files `tests/test_run.py` and `tests/pipelines/data_science/test_pipeline.py` for instructions on how to write your tests. Run the tests as follows:
-
-```
-pytest
-```
-
-You can configure the coverage threshold in your project's `pyproject.toml` file under the `[tool.coverage.report]` section.
-
-## Project dependencies
-
-To see and update the dependency requirements for your project use `requirements.txt`. Install the project requirements with `pip install -r requirements.txt`.
-
-[Further information about project dependencies](https://docs.kedro.org/en/stable/kedro_project_setup/dependencies.html#project-specific-dependencies)
-
-## How to work with Kedro and notebooks
-
-> Note: Using `kedro jupyter` or `kedro ipython` to run your notebook provides these variables in scope: `catalog`, `context`, `pipelines` and `session`.
->
-> Jupyter, JupyterLab, and IPython are already included in the project requirements by default, so once you have run `pip install -r requirements.txt` you will not need to take any extra steps before you use them.
-
-### Jupyter
-To use Jupyter notebooks in your Kedro project, you need to install Jupyter:
+## **📁 Project Structure**
 
 ```
-pip install jupyter
+.
+├── data/
+│   ├── 01_raw/                        # raw gold price data
+│   ├── 04_feature/                    # feature-engineered dataset
+│   ├── 07_model_output/               # predictions on test set
+│   └── 08_reporting/                  # stored model artifacts
+│
+├── src/commodities_time_to_roi
+│   ├── /pipelines/time_to_roi/                   # target creation, feature pipeline and model training
+│   └── commodities_time_to_roi/streamlit_app.py             # streamlit app
+│
+└── README.md                        
 ```
 
-After installing Jupyter, you can start a local notebook server:
+---
 
+## **🔧 Modeling Approach**
+
+### **1) Target Construction**
+
+For each ROI threshold (e.g., +10%, +20%, +30%):
+
+| Target                 | Task           | Interpretation                             |
+| ---------------------- | -------------- | ------------------------------------------ |
+| `time_to_10pct_months` | Regression     | Number of months until +10% ROI is reached |
+| `roi_10pct_within_12`  | Classification | Whether +10% ROI occurs within 12 months   |
+
+Both are computed in a **forward-looking** manner with proper **right-censoring** handling.
+
+---
+
+### **2) Feature Engineering**
+
+All features are computed using **only information available at the time of prediction**:
+
+| Group                 | Examples                                                  |
+| --------------------- | --------------------------------------------------------- |
+| Returns               | 1m, 3m, 6m, 12m                                           |
+| Volatility & Z-scores | Rolling std and normalized prices                         |
+| Momentum & MAs        | MA crossovers, price-to-MA ratios                         |
+| Oscillators           | RSI(6), MACD, MACD histogram                              |
+| Market Stress         | Drawdown depth and recovery                               |
+| **SARIMA Signals**    | Fitted trend, residual mispricing, 1-month ahead forecast |
+
+All features are **shifted by 1 month** to **avoid look-ahead bias**.
+
+---
+
+### **3) Model Training**
+
+* Models trained using **chronological (time-based) splits**
+* **CatBoost** handles non-linear interactions and categorical stability
+* Regression evaluated using **RMSE** (in months)
+* Classification evaluated using **AUC**
+
+---
+
+## **📦 Installation**
+
+Follow these steps to install and run the project locally:
+
+1. **Clone the repository**
+
+```bash
+git clone https://github.com/JMedegan/commodities_time_to_roi.git
+cd commodities_time_to_roi
 ```
-kedro jupyter notebook
+
+2. **Install dependencies**
+
+```bash
+pip install uv
+uv sync
 ```
 
-### JupyterLab
-To use JupyterLab, you need to install it:
-
+3. **Prepare your data**
+   Place your monthly gold price dataset (CSV) into:
 ```
-pip install jupyterlab
-```
-
-You can also start JupyterLab:
-
-```
-kedro jupyter lab
+data/01_raw/
 ```
 
-### IPython
-And if you want to run an IPython session:
+4. **Train models**
 
+```bash
+kedro run --pipeline time_to_roi
 ```
-kedro ipython
+
+5. **Run the Streamlit dashboard**
+
+```bash
+streamlit run src\commodities_time_to_roi\streamlit_app.py
 ```
 
-### How to ignore notebook output cells in `git`
-To automatically strip out all output cell contents before committing to `git`, you can use tools like [`nbstripout`](https://github.com/kynan/nbstripout). For example, you can add a hook in `.git/config` with `nbstripout --install`. This will run `nbstripout` before anything is committed to `git`.
+This will open the interactive ROI dashboard in your browser.
 
-> *Note:* Your output cells will be retained locally.
+The dashboard displays:
 
-## Package your Kedro project
+* RMSE for time-to-ROI models
+* AUC for ROI-within-horizon models
+* Observed vs Predicted curves
+* Uncertainty intervals (when enabled)
+* Recent forward-looking ROI expectation
 
-[Further information about building project documentation and packaging your project](https://docs.kedro.org/en/stable/tutorial/package_a_project.html)
+<center>
+
+![Gold ROI Dashboard](conf/dashboard_snapshot.png)
+
+</center>
+
+---
+
+## **🎛 Customization**
+
+You can easily tailor this project to other assets or markets:
+
+| Want to customize                                 | Do this                                                                        |
+| ------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Change ROI targets                                | Edit `roi_targets` in the pipeline                           |
+| Change investment horizon (e.g., 6 or 24 months)  | Adjust `horizon_months` in `add_multi_roi_classification_targets()`            |
+| Use a different market (e.g., S&P500, BTC, Wheat) | Replace the `Price` column with your asset's monthly price                     |
+| Tune model performance                            | Adjust CatBoost parameters or feature selection thresholds                     |
+| Add new technical indicators                      | Add functions in `feature_engineering/` and include them in `build_features()` |
+
+This pipeline is **asset-agnostic** — any monthly time series can be plugged in.
+
+
+---
+
+## **🚀 Future Enhancements**
+
+* **Bayesian / Conformal Prediction Intervals**
+  More rigorous uncertainty quantification to replace or complement quantile-based confidence bands.
+
+* **Automated Monthly Data Refresh**
+  Ability to **automatically scrape or pull new gold price data each month** (e.g., from Federal Reserve / ECB / Yahoo Finance APIs) and **retrain models on schedule**, keeping insights continuously up to date.
+
+---
+
+## **📜 License**
+
+MIT License — open for research and extension.
